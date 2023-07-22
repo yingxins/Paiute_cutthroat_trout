@@ -1,0 +1,110 @@
+---
+title: "sort bam stats"
+author: "Yingxin Su"
+date: "2023-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(grid)
+```
+
+
+```{r}
+data<- read.table("sortbam_stat.txt")
+colnames(data)[1] <- "Ind"
+colnames(data)[2] <- "MappedReads"
+colnames(data)[3] <- "Percentage"
+data<- data %>% mutate(Ind1 = Ind)
+data <- data %>% separate(col=Ind1, into=c("Plate","Pos","Year","Index","Location"),sep = "_" )
+data$Location<- gsub(".sort.flt.bam","",data$Location)
+data$Year<- gsub("19A", "19", data$Year)
+data$Year<- gsub("19B", "19", data$Year)
+data$Year<- gsub("Y0", "200", data$Year)
+data$Year<- gsub("Y1", "201", data$Year)
+data$Year<- gsub("Y2", "202", data$Year)
+data$Year<- gsub("Y9", "199", data$Year)
+data$Location<- gsub("BCC", "USKC", data$Location)
+data <- data %>% filter(is.na(Location)==F)
+
+remove <- data %>% filter(Plate== "plate4" & Location == "SHK")
+remove <- remove$Ind
+data <- data %>% filter(!Ind %in% remove)
+data_filter<- data %>% arrange(desc(MappedReads)) %>% filter(MappedReads > 500000 & Ind !="plate7_F08_Y21_0031_SWC_removed.sort.flt.bam") 
+data_filter %>% filter(Location == "SHK" & Year=="2000")
+data_stats <- data_filter %>% group_by(Location,Year) %>% count()
+data_stats
+subtotal <- data_stats %>% arrange(Location) %>% group_by(Location,Year) %>% 
+summarise(Total=sum(n)) 
+total
+total<- data_stats %>% group_by(Location) %>% summarise(Sum=sum(n))
+summary <- inner_join(subtotal, total, by="Location")
+summary<- summary %>% mutate(prop=Total/Sum) %>% mutate(relative=Total/max(summary$Sum))
+summary
+summary <- summary %>% group_by(Location) %>% mutate(label_n=cumsum(prop) - 0.5*prop) %>% mutate(label_location = label_n + 0.02) %>% mutate(label_relative=cumsum(relative)-0.5*relative)
+summary<- summary %>% mutate(Basin=case_when(Location %in% c("CAB","NFC","SHK", "SWC") ~ "Out-of-Basin",
+                                   Location %in% c("COR", "COY","FMC", "FVC", "USKC")~ "Within-Basin"))
+x_text<- factor(summary$Location, levels = c( "CAB","NFC","SHK", "SWC", "COR", "COY", "FMC","FVC", "USKC" ))
+y_order <- factor(summary$Year,levels = rev(c("2000","2011","2012","2017", "2019","2020","2021")))
+summary
+summary$Basin_order <- factor(summary$Basin, levels= c("Within-Basin", "Out-of-Basin"))
+(plot_sample <- summary %>% ggplot(aes(x=x_text, y=relative ,fill=y_order)) + geom_bar(stat = "identity",width=0.9) + theme_classic() + 
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        axis.title = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(face="bold",size=10),
+        axis.ticks.y = element_blank(), 
+        legend.text = element_text(face = "bold",size=9),
+        legend.title = element_text(face = "bold"),
+        axis.line.y = element_blank()) +scale_y_continuous(expand = c(0,0)) + scale_fill_viridis_d(option = "plasma",alpha=0.8,guide=guide_legend(reverse = T,nrow = 1)) + geom_text(aes(x=x_text,y=label_relative,label=Total),size=2.5)+facet_wrap(.~Basin_order,scales = "free_x")+theme(strip.text = element_text(size=11,face="bold"))+labs(fill="Year"))
+plot_sample_gg <- ggplot_gtable(ggplot_build(plot_sample))
+stripr <- which(grepl('strip-t', plot_sample_gg$layout$name))
+fills<-c("darkorange","cornflowerblue")
+k <- 1
+for (i in stripr) {
+  j <- which(grepl('rect', plot_sample_gg$grobs[[i]]$grobs[[1]]$childrenOrder))
+  plot_sample_gg$grobs[[i]]$grobs[[1]]$children[[j]]$gp$fill <- fills[k]
+  k <- k+1
+}
+a <- grid.draw(plot_sample_gg)
+a
+selected <- data_filter$Ind
+selected
+write.table(selected,"bamlist_flt_500K.txt",quote = F,row.names = F,col.names = F)
+```
+
+```{r}
+summary1 <- summary %>% ungroup() %>%mutate(Sum_prop = Sum/sum(Total)*9)
+count <- data_filter %>%  ungroup() %>% group_by(Location) %>% count() 
+count$Index <- seq(1,9,1)
+summary1 <- inner_join(summary1,count) %>% select(!n)
+Sum_prop<- summary1$Sum_prop
+summary1 %>% arrange(Sum_prop)
+x_index<- factor(summary1$Index, levels = c( 1,6,7, 8, 2, 3, 4,5, 9))
+x_text1<- factor(summary$Location, levels = c( "FMC","FVC","CAB","COR","COY","SWC","SHK", "USKC","NFC"))
+(plot_sample <- summary1 %>% ggplot(aes(x=x_text1, y=prop ,fill=y_order)) + geom_bar(aes(width=Sum_prop),stat = "identity") + theme_classic() + 
+  theme(legend.position = "none",
+        legend.direction = "horizontal",
+        axis.title = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(face="bold",size=10),
+        axis.ticks.y = element_blank(), 
+        axis.line.y = element_blank()) +scale_y_continuous(expand = c(0,0)) + scale_fill_viridis_d(option = "plasma",alpha=0.8) + geom_text(aes(x=x_text,y=label_n,label=Total),size=3)+
+  theme(strip.text = element_text(size=11,face="bold"))+scale_x_discrete(breaks=))
+```
+
+```{r}
+NFC_Y17_Y20 <- data %>% filter(MappedReads > 1000000) %>% filter(Location=="NFC") %>% filter(Year=="Y17" | Year=="Y20") %>% filter(Plate !="plate9")
+plate1_USKC_Y21 <- data %>% filter(MappedReads > 1000000) %>% filter(Location=="USKC" & Plate=="plate1")
+NFC_Y17_Y20 <- NFC_Y17_Y20$Ind
+plate1_USKC_Y21 <- plate1_USKC_Y21$Ind
+write.table(NFC_Y17_Y20,"bamlist_flt_1000K_NFC_Y17_Y20.txt",quote = F,row.names = F,col.names = F)
+write.table(plate1_USKC_Y21,"bamlist_flt_1000K_plate1_USKC_Y21.txt",quote = F,row.names = F,col.names = F)
+```
+

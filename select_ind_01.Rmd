@@ -1,0 +1,76 @@
+---
+title: "PCT_tidy_select_ind"
+author: "Yingxin Su"
+date: "2023-06-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This process aims selecting the individuals by the mapped reads and the number of loci called without -minInd filter 
+
+#Load the library
+
+```{r}
+library(tidyverse)
+library(vcfR)
+library(ggbreak)
+```
+
+
+Step One: read the mapped reads file 
+
+```{r}
+mapped <- read.table("mapped_stats.txt")
+colnames(mapped)[1] = "Ind"
+colnames(mapped)[2] = "Mappedreads"
+colnames(mapped)[3] = "Percentage"
+head(mapped)
+nrow(mapped)
+```
+
+Step Two: read the genotype calling files 
+
+```{r}
+vcf <- read.vcfR("bamlist.vcf.gz")
+vcf_gt<- extract.gt(vcf)
+vcf_gt <- vcf_gt %>% as.data.frame()
+vcf_gt <- vcf_gt %>% t() %>% as.data.frame() 
+
+meta <- read.table("bamlist.txt")
+meta <- meta$V1
+rownames(vcf_gt) <-meta
+SNP_num <- ncol(vcf_gt) - rowSums(is.na(vcf_gt))
+SNP_num
+SNP_num <- SNP_num %>% data.frame()
+colnames(SNP_num)[1] <- "Called_SNPs"
+SNP_num <- SNP_num %>% rownames_to_column(var="Ind")
+data <- SNP_num %>% inner_join(mapped) %>% mutate(Ind1=Ind) %>% separate(Ind1,into = c("Plate","Year","Index", "Location"),sep = "_")
+data$Plate <-gsub("plate", "Plate ", data$Plate)
+rep <- data %>% filter(Location=="SHK" & Plate=="Plate 4")
+rep <- rep$Ind
+data <- data %>% filter(Ind != c("plate10_NA","plate10_Y17", "plate10_Y19", "plate10_Y19A")) %>% filter(!Ind %in% rep) 
+data
+plate_order<- factor(data$Plate, levels = c(paste0("Plate ",1:10)))
+figure1 <- data %>% ggplot(aes(Mappedreads,Called_SNPs)) + geom_point(aes(fill=plate_order),shape=21,col="black") + labs(fill="Plate",x= "Mapped Reads", y= "Non-missing SNPs") + theme_bw() + scale_x_continuous(breaks = seq(0,1.5e+07,2e+06)) + geom_vline(xintercept = 5.9e05,linetype="dashed")+ geom_hline(yintercept = 14000,linetype="dashed")+ theme(
+  legend.position = "bottom",
+  line = element_line(size=1.2),
+  text = element_text(face="bold")
+) + geom_rect(aes(xmin=0,xmax=1.5e06,ymin=0,ymax=50000),alpha=0,color="black")
+figure2 <- data %>% ggplot(aes(Mappedreads,Called_SNPs)) + geom_point(aes(fill=plate_order),shape=21,col="black") + labs(fill="Plate",x= "", y= "") + theme_bw() + scale_x_continuous(breaks = seq(0,1.5e+07,2e+06)) + geom_vline(xintercept = 5.9e05,linetype="dashed")+ geom_hline(yintercept = 13800,linetype="dashed") + theme(
+  legend.position = "none",
+  line = element_line(size=1.2),
+  text = element_text(face="bold")
+)+ scale_x_continuous(breaks = seq(0,1.5e+06,1.5e+06),limits=c(0,1.5e+06)) + scale_y_continuous(breaks = seq(0,50000,50000),limits=c(0,50000))
+data_filter <- data %>% filter(Mappedreads > 6e05 & Called_SNPs > 15000) %>% mutate(list=paste0(Ind,".sort.flt.bam"))
+bamlist <- data_filter$list
+write.table(bamlist, "bamlist_flt_600Kreads_15KSNPs.txt",row.names = F,col.names = F,quote = F)
+saveRDS(vcf_gt, "PCT_vcf_gt.rds")
+```
+
+```{r}
+
+```
+

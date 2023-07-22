@@ -1,0 +1,65 @@
+---
+title: "ind_het"
+author: "Yingxin Su"
+date: "2023-03-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load the library
+```{r}
+library(tidyverse)
+```
+
+# Load the table 
+
+```{r}
+table <-read.table("bamlist_flt_500K.txt")
+l1 <- gsub(".sort.flt.bam", "", table$V1)
+l2 <- gsub(".sort.flt.bam", "_snp", table$V1)
+list <- cbind(l1,l2)
+ind <- read.csv("individual_heterozygosity.csv")
+```
+
+#Barplot with line
+
+```{r}
+ind
+ind %>% group_by(Location,Year) %>% count
+median <- ind %>% filter(Label %in% list) %>% mutate(label1=paste(label,type)) %>% group_by(label1) %>% summarise(median=median(Het)) %>% separate(col="label1",sep=" ",into = c("Location","Year", "Type"))
+ind$type <- gsub("SNP","Panel",ind$type)
+median$Type <- gsub("SNP","Panel",median$Type)
+het_plot <- ind %>% filter(Label %in% list) %>% ggplot()  + geom_line(data = median,aes(x=Year,y=median,group=Type,color=Type)) + facet_wrap(.~Location,scales = "free_x") + geom_boxplot(aes(x=Year,y=Het,fill=type),width=0.7) +theme_classic()  +labs(x="Year",y="Individual Heterozygosity",color="Data Type",fill="Data Type")+ theme(legend.position = "bottom", 
+             title = element_text(face = "bold"),
+              text=element_text(face = "bold"),
+              axis.line.x=element_line(size=1.2),
+              axis.text.x = element_text(size=10),
+              axis.title.x=element_text(size=13),
+              strip.text.x = element_text(size=11))  + scale_color_manual(values = c("RAD"="#0D0887FF","Panel"="#BB3754FF")) + scale_fill_manual(values = c("RAD"="#0D0887FF","Panel"="#BB3754FF"))
+het_plot
+
+```
+##save the picture 
+
+```{r}
+pdf("Heterozygosity_barplot.pdf",height = 5.83,width=8.27)
+het_plot
+dev.off()
+```
+
+
+#Histogram distribution
+
+```{r}
+plot1<- ind %>% ggplot(aes(x=Het)) + geom_histogram(aes(x=Het,color=type,fill=type), alpha=0.5,position = "identity") + facet_wrap(.~label,scale="free_x",ncol = 3) + theme_classic() + scale_color_viridis_d() +scale_fill_viridis_d() +scale_y_continuous(expand=c(0,0))+labs(x="Proportion of Heterozygosity",y="Count",color="Data Type",fill="Data Type")+ theme(legend.position = "bottom", 
+              title = element_text(face = "bold"),
+              text=element_text(face = "bold"),
+              axis.line.x=element_line(size=1.2),
+              axis.text.x = element_text(size=10),
+              strip.text.x = element_text(size=11))
+plot1
+```
+
