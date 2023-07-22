@@ -1,0 +1,75 @@
+---
+title: "PCT_PCA_transonly"
+author: "Yingxin Su"
+date: "2023-02-10"
+output: html_document
+---
+
+```{r}
+library(optparse)
+library(ggplot2)
+library(ggforce)
+library(concaveman)
+library(tidyverse)
+library(cowplot)
+
+option_list <- list(make_option(c('-i','--in_file'), action='store', type='character', default=NULL, help='Input file (output from ngsCovar)'),
+                    make_option(c('-c','--comp'), action='store', type='character', default=1-2, help='Components to plot'),
+                    make_option(c('-a','--annot_file'), action='store', type='character', default=NULL, help='Annotation file with individual classification (2 column TSV with ID and ANNOTATION)'),
+                    make_option(c('-o','--out_file'), action='store', type='character', default=NULL, help='Output file')
+)
+opt <- parse_args(OptionParser(option_list = option_list))
+
+```
+```{r}
+covar <- read.table("pcangsd_new_panel_transonly.cov", stringsAsFact=FALSE);
+annot <- read.table("meta_trans_300Kreads.txt", header = F); # note that plink cluster files are usually tab-separated instead
+#annot <- annot[-c(1),]
+colnames(annot)[1] = "FID"
+colnames(annot)[2] = "POS"
+colnames(annot)[3] = "IID"
+colnames(annot)[4] = "CLUSTER"
+
+# Parse components to analyze
+comp <- as.numeric(strsplit(opt$comp, "-", fixed=TRUE)[[1]])
+# Eigenvalues
+eig <- eigen(covar, symm=TRUE);
+eig$val <- eig$val/sum(eig$val);
+cat(signif(eig$val, digits=3)*100,"\n");
+
+# Plot
+PC <- as.data.frame(eig$vectors)
+colnames(PC) <- gsub("V", "PC", colnames(PC))
+PC$Pop <- factor(annot$CLUSTER)
+PC$Tra <- factor(annot$IID)
+PC$Lab <- factor(annot$FID)
+PC$POS <- factor(annot$POS) 
+
+```
+```{r}
+title <- paste("PC",comp[2]," (",signif(eig$val[comp[2]], digits=3)*100,"%)"," / PC",comp[2]+1," (",signif(eig$val[comp[2]+1], digits=3)*100,"%)",sep="",collapse="")
+PC$Pop <- factor(PC$Pop,levels = c("CAB","NFC","SHK","SWC","COR","COY","FVC","FMC","USKC"))
+
+x_axis = paste("PC",comp[2],sep="")
+y_axis = paste("PC",comp[2]+1,sep="")
+pca1 <- PC %>% ggplot(aes_string(x=x_axis, y=y_axis,color="Pop",shape="Tra")) +   
+  geom_point(size = 2,alpha=1,position=position_jitter(0.005)) +
+  scale_shape_manual(values = c(16,17,15,3,7,8,11))+
+  scale_color_viridis_d(option="turbo")+
+  ggtitle(title) + theme_void() +
+  theme(legend.box = "vertical", 
+        legend.position = "bottom",
+        legend.title = element_text(face = "bold", size = 14), 
+        legend.text = element_text(size = 13, face = "bold"),
+        plot.title = element_text(size = 18, face = "bold") ) +
+  theme(axis.text = element_text(size = 10, face = "bold"), 
+        axis.title = element_text(size = 13, face = "bold"), 
+        axis.line = element_line(size = 1.2),
+        axis.title.y = element_text(angle = 90))+
+  #guide_legend(title.position = "top")+
+  labs(color = "Location",shape="Year") 
+pca1
+viridis::turbo(n=9)
+
+```
+

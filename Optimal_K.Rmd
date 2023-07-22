@@ -1,0 +1,57 @@
+---
+title: "Optimal K"
+author: "Yingxin Su"
+date: "2023-06-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Load the library 
+
+```{r}
+library(tidyverse)
+```
+
+#Load the file 
+
+```{r}
+subset <- read.table("subset.txt")
+wholeset <- read.table("wholeset.txt")
+head(subset)
+head(wholeset)
+```
+
+```{r}
+
+colnames(subset)[1] = "Type"
+colnames(subset)[2] = "K"
+colnames(subset)[3] = "Iter"
+colnames(subset)[4] = "log"
+colnames(wholeset)[1] = "Type"
+colnames(wholeset)[2] = "K"
+colnames(wholeset)[3] = "Iter"
+colnames(wholeset)[4] = "log"
+subset <- subset %>% mutate(log_abs = abs(log))
+subset_stats <- subset %>% group_by(K) %>% summarise(sd=sd(log_abs),mean_abs=mean(log_abs),mean=mean(log)) 
+subset <- inner_join(subset,subset_stats) 
+wholeset <- wholeset %>% mutate(log_abs = abs(log))
+wholeset_stats <- wholeset %>% group_by(K) %>% summarise(sd=sd(log),mean_abs=mean(log_abs),mean=mean(log))
+wholeset <- inner_join(wholeset,wholeset_stats) %>% mutate(log_abs = abs(log))  
+subset <-subset %>% mutate(score=mean_abs/sd)
+wholeset <-wholeset %>% mutate(score=mean_abs/sd)
+head(wholeset)
+head(subset)
+```
+
+# Plot
+
+```{r}
+subset %>% ggplot(aes(x=K,y=score))+ geom_line() + geom_point()
+subset %>% ggplot(aes(x=K,y=mean)) + geom_point(shape=21,size=1.5)+ geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd),width=0) 
+wholeset %>% ggplot(aes(x=K,y=score))+ geom_line() + geom_point()
+wholeset %>% ggplot(aes(x=K,y=mean)) + geom_point(shape=21,size=1.5)+ geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd),width=0) 
+```
+
